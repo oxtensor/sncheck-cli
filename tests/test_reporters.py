@@ -4,9 +4,31 @@ from __future__ import annotations
 
 import json
 
+from rich.console import Console
+
 from sncheck.reporters import json as json_reporter
+from sncheck.reporters import text as text_reporter
 
 from .conftest import scan_fixture
+
+
+def _render_text(name: str) -> str:
+    result = scan_fixture(name)
+    console = Console(record=True, width=100, force_terminal=False)
+    text_reporter.render(result, console=console)
+    return console.export_text()
+
+
+def test_text_report_groups_by_level_and_type() -> None:
+    out = _render_text("risky_wallet_exfil")
+    # Level section headers and a type sub-header are present.
+    assert "── CRITICAL (1) ──" in out
+    assert "[bittensor]" in out
+    # The critical wallet-exfil finding appears, and the bottom summary too.
+    assert "BT-WALLET-EXFIL-001" in out
+    assert "Summary" in out
+    # Critical section is printed before the LOW section (worst-first).
+    assert out.index("── CRITICAL") < out.index("── LOW")
 
 
 def test_json_report_has_stable_schema() -> None:
