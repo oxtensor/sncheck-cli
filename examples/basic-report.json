@@ -1,0 +1,53 @@
+{
+  "schema_version": "0.1",
+  "tool": "sncheck",
+  "tool_version": "0.1.0",
+  "target": {
+    "type": "github",
+    "raw": "https://github.com/example/subnet",
+    "path": null,
+    "owner": "example",
+    "repo": "subnet",
+    "url": "https://github.com/example/subnet"
+  },
+  "commit": "abc1234",
+  "started_at": "2026-06-15T00:00:00Z",
+  "finished_at": "2026-06-15T00:00:02Z",
+  "overall_risk": "high",
+  "summary": {
+    "critical": 0,
+    "high": 1,
+    "medium": 0,
+    "low": 1,
+    "info": 0
+  },
+  "findings": [
+    {
+      "id": "SH-CURL-BASH-001",
+      "title": "Remote script piped to shell",
+      "severity": "high",
+      "category": "shell",
+      "description": "A remote script is downloaded with curl and piped directly into a shell.",
+      "impact": "Remote code can execute during installation with no chance to inspect it first.",
+      "recommendation": "Download the script, read it, and run it explicitly instead of piping curl output into bash/sh.",
+      "file": "setup.sh",
+      "line": 8,
+      "evidence": "curl https://example.com/install.sh | bash",
+      "confidence": "high"
+    },
+    {
+      "id": "DEP-NO-LOCKFILE-001",
+      "title": "No dependency lockfile",
+      "severity": "low",
+      "category": "dependency",
+      "description": "The repo declares dependencies but ships no lockfile.",
+      "impact": "Without a lockfile, installs can resolve to different (possibly malicious) package versions over time.",
+      "recommendation": "Commit a lockfile (poetry.lock, Pipfile.lock, uv.lock, ...) so installs are reproducible.",
+      "file": "requirements.txt",
+      "line": null,
+      "evidence": "no lockfile found alongside dependency manifest",
+      "confidence": "medium"
+    }
+  ],
+  "error": null
+}

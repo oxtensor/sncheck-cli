@@ -1,0 +1,22 @@
+SNCheck report
+
+Target: https://github.com/example/subnet
+Commit: abc1234
+Overall risk: High
+Summary: 0 critical, 1 high, 0 medium, 1 low, 0 info
+
+Findings:
+
+[HIGH] SH-CURL-BASH-001: Remote script piped to shell
+File: setup.sh:8
+Evidence: curl https://example.com/install.sh | bash
+Impact: Remote code can execute during installation with no chance to inspect it first.
+Recommendation: Download the script, read it, and run it explicitly instead of piping curl output into bash/sh.
+Confidence: high
+
+[LOW] DEP-NO-LOCKFILE-001: No dependency lockfile
+File: requirements.txt
+Evidence: no lockfile found alongside dependency manifest
+Impact: Without a lockfile, installs can resolve to different (possibly malicious) package versions over time.
+Recommendation: Commit a lockfile (poetry.lock, Pipfile.lock, uv.lock, ...) so installs are reproducible.
+Confidence: medium
