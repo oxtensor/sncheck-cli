@@ -91,8 +91,9 @@ def fetch_target(target: Target) -> FetchedRepo:
     """Make ``target`` available on the local filesystem for scanning."""
     if target.type == TargetType.LOCAL:
         assert target.path is not None
-        return FetchedRepo(path=Path(target.path), commit=_read_commit(Path(target.path)),
-                           cleanup_dir=None)
+        return FetchedRepo(
+            path=Path(target.path), commit=_read_commit(Path(target.path)), cleanup_dir=None
+        )
     return _clone_github(target)
 
 

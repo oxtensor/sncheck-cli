@@ -8,11 +8,11 @@ shell code that opens files under ``~/.bittensor/wallets`` is high risk.
 from __future__ import annotations
 
 import re
-from typing import Iterable
+from collections.abc import Iterable
 
 from sncheck.file_inventory import FileKind
 from sncheck.models import Category, Confidence, Finding, Severity
-from sncheck.rules.base import FileContext, Rule, register, regex_line_rule, strip_evidence
+from sncheck.rules.base import FileContext, Rule, regex_line_rule, register, strip_evidence
 
 GROUP = "bittensor"
 

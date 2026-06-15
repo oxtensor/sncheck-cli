@@ -8,9 +8,10 @@ scanner can enumerate them, filter by group, and expose them to ``sncheck rules`
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Iterable, Pattern
+from re import Pattern
 
 from sncheck.file_inventory import FileKind, InventoryFile
 from sncheck.models import Category, Confidence, Finding, Severity
@@ -71,9 +72,15 @@ class Rule:
     def applies_to(self, kind: FileKind) -> bool:
         return not self.kinds or kind in self.kinds
 
-    def make_finding(self, *, file: str, evidence: str, line: int | None = None,
-                     severity: Severity | None = None,
-                     confidence: Confidence | None = None) -> Finding:
+    def make_finding(
+        self,
+        *,
+        file: str,
+        evidence: str,
+        line: int | None = None,
+        severity: Severity | None = None,
+        confidence: Confidence | None = None,
+    ) -> Finding:
         """Build a Finding from this rule's metadata, overriding per-match fields."""
         return Finding(
             id=self.id,

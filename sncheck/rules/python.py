@@ -8,11 +8,11 @@ rule falls back to a regex scan so coverage degrades gracefully.
 from __future__ import annotations
 
 import ast
-from typing import Iterable
+from collections.abc import Iterable
 
 from sncheck.file_inventory import FileKind
 from sncheck.models import Category, Confidence, Finding, Severity
-from sncheck.rules.base import FileContext, Rule, register, regex_line_rule, strip_evidence
+from sncheck.rules.base import FileContext, Rule, regex_line_rule, register, strip_evidence
 
 GROUP = "python"
 _PY = (FileKind.PYTHON,)
@@ -107,8 +107,13 @@ def _ast_rule(
 def _match_subprocess_shell(node: ast.AST) -> int | None:
     if isinstance(node, ast.Call):
         name = _call_name(node)
-        if name in {"subprocess.run", "subprocess.call", "subprocess.Popen",
-                    "subprocess.check_call", "subprocess.check_output"} and _has_shell_true(node):
+        if name in {
+            "subprocess.run",
+            "subprocess.call",
+            "subprocess.Popen",
+            "subprocess.check_call",
+            "subprocess.check_output",
+        } and _has_shell_true(node):
             return node.lineno
     return None
 

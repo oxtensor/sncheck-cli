@@ -8,8 +8,8 @@ matching (OSV / Trivy) is left to a later milestone.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from sncheck.file_inventory import FileKind, InventoryFile
 from sncheck.models import Category, Confidence, Finding, Severity
@@ -23,6 +23,7 @@ _MANIFESTS = {"requirements.txt", "pyproject.toml", "pipfile", "setup.py", "setu
 
 
 # -- DEP-NO-LOCKFILE-001 (repo-level) ----------------------------------------
+
 
 def _no_lockfile_check(inventory: list[InventoryFile], root: Path) -> Iterable[Finding]:
     names = {f.path.name.lower() for f in inventory}

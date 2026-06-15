@@ -57,8 +57,7 @@ def render(result: ScanResult, console: Console | None = None) -> None:
 
     risk = result.overall_risk
     console.print(
-        Text("Overall risk: ", style="bold")
-        + Text(_RISK_LABEL[risk], style=_RISK_STYLE[risk])
+        Text("Overall risk: ", style="bold") + Text(_RISK_LABEL[risk], style=_RISK_STYLE[risk])
     )
 
     if result.error:
