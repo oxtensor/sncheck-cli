@@ -65,15 +65,10 @@ def render(result: ScanResult, console: Console | None = None) -> None:
         console.print(Text(f"Scan error: {result.error}", style="bold red"))
         return
 
-    s = result.summary
-    console.print(
-        f"Summary: {s.critical} critical, {s.high} high, {s.medium} medium, "
-        f"{s.low} low, {s.info} info"
-    )
-
     if not result.findings:
         console.print()
-        console.print("No findings.")
+        console.print("No findings at the selected severity.")
+        _print_summary(console, result)
         return
 
     console.print()
@@ -119,3 +114,31 @@ def render(result: ScanResult, console: Console | None = None) -> None:
         console.print(f"Impact: {first.impact}")
         console.print(f"Recommendation: {first.recommendation}")
         console.print(f"Confidence: {first.confidence.value}")
+
+    _print_summary(console, result)
+
+
+def _print_summary(console: Console, result: ScanResult) -> None:
+    """Print the severity summary at the bottom of the report."""
+    s = result.summary
+    total = s.critical + s.high + s.medium + s.low + s.info
+    hidden = total - len(result.findings)
+    risk = result.overall_risk
+
+    console.print()
+    console.print(Text("Summary", style="bold"))
+    console.print(
+        Text("  Overall risk: ", style="bold") + Text(_RISK_LABEL[risk], style=_RISK_STYLE[risk])
+    )
+    console.print(
+        f"  {s.critical} critical, {s.high} high, {s.medium} medium, "
+        f"{s.low} low, {s.info} info  ({total} total)"
+    )
+    if hidden > 0:
+        console.print(
+            Text(
+                f"  {hidden} lower-severity finding(s) hidden "
+                "— use --min-severity info to show all",
+                style="dim",
+            )
+        )

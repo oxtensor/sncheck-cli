@@ -42,12 +42,15 @@ sncheck version
 
 Some patterns (like `hotkey`) appear throughout normal subnet code. SNCheck keeps
 these quiet: `hotkey`/`coldkey` references produce at most one finding per file,
-and `hotkey` is reported as `info` (context, not risk). To focus on actionable
-findings:
+and `hotkey` is reported as `info` (context, not risk). By default the report
+shows findings at `low` and above; the summary at the bottom always reflects the
+full counts.
 
 ```bash
-sncheck check <target> --min-severity medium   # hide info/low
-sncheck check <target> --rules shell,python    # only run specific groups
+sncheck check <target>                      # default: low and above
+sncheck check <target> --min-severity medium  # only medium+ (cut more noise)
+sncheck check <target> --min-severity info    # show everything, including hotkey context
+sncheck check <target> --rules shell,python   # only run specific groups
 ```
 
 ## What It Detects

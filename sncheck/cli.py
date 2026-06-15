@@ -77,9 +77,10 @@ def check(
         False, "--include-experimental", help="Include experimental rules."
     ),
     min_severity: Severity = typer.Option(
-        Severity.INFO,
+        Severity.LOW,
         "--min-severity",
-        help="Only show findings at this severity or above (counts still reflect all).",
+        help="Only show findings at this severity or above (default: low; counts still "
+        "reflect all). Use 'info' to show everything.",
     ),
     no_clone_cleanup: bool = typer.Option(
         False, "--no-clone-cleanup", help="Keep the temporary clone directory."
