@@ -84,22 +84,30 @@ regex_line_rule(
     kinds=_CODE_KINDS,
     patterns=[r"\bcoldkey\b"],
     flags=re.IGNORECASE,
+    # Coldkey appears throughout normal wallet code; one awareness finding per
+    # file is enough. The dedicated wallet-path / mnemonic rules carry the real
+    # high-severity signal.
+    per_file_once=True,
 )
 
 regex_line_rule(
     id="BT-HOTKEY-REF-001",
     title="Hotkey reference in code",
-    severity=Severity.LOW,
+    severity=Severity.INFO,
     category=Category.BITTENSOR,
     confidence=Confidence.LOW,
     description="Code references a hotkey.",
-    impact="Hotkeys are used for signing. Most subnet code uses them legitimately; flagged "
-    "for awareness.",
-    recommendation="Confirm the hotkey is only used for expected signing operations.",
+    impact="Hotkeys are required by virtually every subnet (miners and validators sign with "
+    "them). This is informational context, not a risk on its own.",
+    recommendation="No action needed unless the hotkey is exported, written to disk, or sent "
+    "over the network. Those cases are covered by higher-severity rules.",
     group=GROUP,
     kinds=_CODE_KINDS,
     patterns=[r"\bhotkey\b"],
     flags=re.IGNORECASE,
+    # 'hotkey' is ubiquitous in subnet code. Emit at most one informational
+    # finding per file instead of one per line.
+    per_file_once=True,
 )
 
 regex_line_rule(

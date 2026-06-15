@@ -136,27 +136,44 @@ def regex_line_rule(
     kinds: Iterable[FileKind] = (),
     experimental: bool = False,
     flags: int = 0,
+    per_file_once: bool = False,
 ) -> Rule:
-    """Create and register a rule that flags every line matching any pattern.
+    """Create and register a rule that flags lines matching any pattern.
 
     This covers the common case of "if a line looks like X, raise a finding".
     More nuanced rules (AST analysis, multi-line context) define their own
     check function instead.
+
+    When ``per_file_once`` is set, the rule reports a single finding per file at
+    the first match, with the total occurrence count noted in the evidence. Use
+    this for references that are common and expected (e.g. ``hotkey``) so the
+    rule provides awareness without one finding per line.
     """
     compiled: list[Pattern[str]] = [
         p if isinstance(p, re.Pattern) else re.compile(p, flags) for p in patterns
     ]
 
     def check(ctx: FileContext) -> Iterable[Finding]:
+        matches: list[tuple[int, str]] = []
         for lineno, line in enumerate(ctx.lines(), start=1):
-            for pat in compiled:
-                if pat.search(line):
+            if any(pat.search(line) for pat in compiled):
+                matches.append((lineno, line))
+                if not per_file_once:
                     yield rule.make_finding(
                         file=ctx.relative,
                         line=lineno,
                         evidence=strip_evidence(line),
                     )
-                    break  # one finding per line is enough
+        if per_file_once and matches:
+            first_line, first_text = matches[0]
+            evidence = strip_evidence(first_text)
+            if len(matches) > 1:
+                evidence += f"  (+{len(matches) - 1} more references in this file)"
+            yield rule.make_finding(
+                file=ctx.relative,
+                line=first_line,
+                evidence=evidence,
+            )
 
     rule = Rule(
         id=id,

@@ -79,23 +79,43 @@ def render(result: ScanResult, console: Console | None = None) -> None:
     console.print()
     console.print(Text("Findings:", style="bold"))
 
-    ordered = sorted(
-        result.findings,
-        key=lambda f: (_SEVERITY_ORDER.index(f.severity), f.file, f.line or 0, f.id),
+    # Group repeated hits of the same rule in the same file so that a rule
+    # firing many times (e.g. a "hotkey" reference on 60 lines) collapses into
+    # one block with the line numbers, instead of 60 identical blocks.
+    groups: dict[tuple[str, str], list[object]] = {}
+    for finding in result.findings:
+        groups.setdefault((finding.id, finding.file), []).append(finding)
+
+    ordered_groups = sorted(
+        groups.values(),
+        key=lambda g: (_SEVERITY_ORDER.index(g[0].severity), g[0].file, g[0].id),
     )
-    for finding in ordered:
+    for group in ordered_groups:
+        first = group[0]
+        sev = first.severity
         console.print()
-        sev = finding.severity
         header = Text()
         header.append(f"[{sev.value.upper()}] ", style=_SEVERITY_STYLE[sev])
-        header.append(f"{finding.id}: {finding.title}")
+        header.append(f"{first.id}: {first.title}")
+        if len(group) > 1:
+            header.append(f"  (×{len(group)})", style="dim")
         console.print(header)
 
-        location = finding.file
-        if finding.line is not None:
-            location += f":{finding.line}"
-        console.print(f"File: {location}")
-        console.print(f"Evidence: {finding.evidence}")
-        console.print(f"Impact: {finding.impact}")
-        console.print(f"Recommendation: {finding.recommendation}")
-        console.print(f"Confidence: {finding.confidence.value}")
+        if len(group) == 1:
+            location = first.file
+            if first.line is not None:
+                location += f":{first.line}"
+            console.print(f"File: {location}")
+            console.print(f"Evidence: {first.evidence}")
+        else:
+            lines = [f.line for f in group if f.line is not None]
+            shown = ", ".join(str(n) for n in lines[:10])
+            if len(lines) > 10:
+                shown += f", … (+{len(lines) - 10} more)"
+            console.print(f"File: {first.file} ({len(group)} occurrences)")
+            console.print(f"Lines: {shown}")
+            console.print(f"Evidence (first): {first.evidence}")
+
+        console.print(f"Impact: {first.impact}")
+        console.print(f"Recommendation: {first.recommendation}")
+        console.print(f"Confidence: {first.confidence.value}")

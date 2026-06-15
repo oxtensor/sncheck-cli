@@ -76,6 +76,11 @@ def check(
     include_experimental: bool = typer.Option(
         False, "--include-experimental", help="Include experimental rules."
     ),
+    min_severity: Severity = typer.Option(
+        Severity.INFO,
+        "--min-severity",
+        help="Only show findings at this severity or above (counts still reflect all).",
+    ),
     no_clone_cleanup: bool = typer.Option(
         False, "--no-clone-cleanup", help="Keep the temporary clone directory."
     ),
@@ -92,7 +97,7 @@ def check(
         Console(stderr=True).print(f"[bold red]Internal error:[/] {exc}")
         raise typer.Exit(EXIT_INTERNAL) from exc
 
-    _emit(result, format, output)
+    _emit(_filter_for_display(result, min_severity), format, output)
 
     if result.error is not None:
         raise typer.Exit(EXIT_TARGET)
@@ -103,6 +108,18 @@ def check(
             raise typer.Exit(EXIT_THRESHOLD)
 
     raise typer.Exit(EXIT_OK)
+
+
+def _filter_for_display(result: ScanResult, min_severity: Severity) -> ScanResult:
+    """Return a copy of the result whose findings are filtered for display.
+
+    The summary counts are left untouched so the headline numbers always reflect
+    every finding, even when the detailed list is filtered.
+    """
+    if min_severity == Severity.INFO:
+        return result
+    kept = [f for f in result.findings if f.severity.rank >= min_severity.rank]
+    return result.model_copy(update={"findings": kept})
 
 
 def _emit(result: ScanResult, format: OutputFormat, output: Path | None) -> None:

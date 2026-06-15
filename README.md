@@ -38,6 +38,18 @@ sncheck rules explain SH-CURL-BASH-001
 sncheck version
 ```
 
+### Reducing noise
+
+Some patterns (like `hotkey`) appear throughout normal subnet code. SNCheck keeps
+these quiet: `hotkey`/`coldkey` references produce at most one finding per file,
+and `hotkey` is reported as `info` (context, not risk). To focus on actionable
+findings:
+
+```bash
+sncheck check <target> --min-severity medium   # hide info/low
+sncheck check <target> --rules shell,python    # only run specific groups
+```
+
 ## What It Detects
 
 - Bittensor wallet path access

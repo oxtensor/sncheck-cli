@@ -60,6 +60,29 @@ def test_check_json_format() -> None:
     assert any(f["id"] == "PY-EVAL-EXEC-001" for f in payload["findings"])
 
 
+def test_check_min_severity_filters_low_findings() -> None:
+    # risky_python_exec has high findings; at --min-severity high the medium
+    # os.system finding should be filtered out of the JSON findings list, while
+    # the summary still counts it.
+    result = runner.invoke(
+        app,
+        [
+            "check",
+            str(FIXTURES / "risky_python_exec"),
+            "--format",
+            "json",
+            "--min-severity",
+            "high",
+        ],
+    )
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    severities = {f["severity"] for f in payload["findings"]}
+    assert severities <= {"high", "critical"}
+    # Summary is unfiltered, so medium count is preserved.
+    assert payload["summary"]["medium"] >= 1
+
+
 def test_check_unknown_rule_group_is_usage_error() -> None:
     result = runner.invoke(app, ["check", str(FIXTURES / "safe_repo"), "--rules", "bogus"])
     assert result.exit_code == 2
