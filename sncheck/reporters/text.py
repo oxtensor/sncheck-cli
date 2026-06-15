@@ -74,16 +74,18 @@ def render(result: ScanResult, console: Console | None = None) -> None:
     console.print()
     console.print(Text("Findings:", style="bold"))
 
-    # Group findings first by severity level, then by category (type). Within a
-    # level+type, repeated hits of the same rule in the same file collapse into
-    # one block (e.g. a "hotkey" reference on 60 lines -> one block).
+    # Group findings by severity level, then by category (type), then by rule.
+    # All occurrences of one rule share a single Impact/Recommendation block and
+    # are listed as locations underneath, so identical text is never repeated.
     by_level = _group_by_level_and_type(result.findings)
 
     for severity in _SEVERITY_ORDER:
         by_type = by_level.get(severity)
         if not by_type:
             continue
-        count = sum(len(groups) for groups in by_type.values())
+        count = sum(
+            len(rule_findings) for rules in by_type.values() for rule_findings in rules.values()
+        )
         console.print()
         console.print(
             Text(f"── {severity.value.upper()} ", style=_SEVERITY_STYLE[severity])
@@ -91,62 +93,67 @@ def render(result: ScanResult, console: Console | None = None) -> None:
         )
         for category in sorted(by_type):
             console.print(Text(f"  [{category}]", style="bold"))
-            for group in by_type[category]:
-                _print_group(console, group)
+            for rule_id in sorted(by_type[category]):
+                _print_rule_group(console, by_type[category][rule_id])
 
     _print_summary(console, result)
 
 
+# Maximum number of locations listed per rule before truncating.
+_MAX_LOCATIONS = 15
+
+
 def _group_by_level_and_type(findings) -> dict:
-    """Bucket findings into {severity: {category: [ (rule,file) groups ]}}."""
-    # First collapse identical rule+file hits into one group each.
-    collapsed: dict[tuple[str, str], list] = {}
-    for finding in findings:
-        collapsed.setdefault((finding.id, finding.file), []).append(finding)
-
+    """Bucket findings into {severity: {category: {rule_id: [findings]}}}."""
     by_level: dict = {}
-    for group in collapsed.values():
-        first = group[0]
-        by_type = by_level.setdefault(first.severity, {})
-        by_type.setdefault(first.category.value, []).append(group)
+    for finding in findings:
+        by_type = by_level.setdefault(finding.severity, {})
+        by_rule = by_type.setdefault(finding.category.value, {})
+        by_rule.setdefault(finding.id, []).append(finding)
 
-    # Stable ordering of the groups within each category: by file then rule id.
+    # Stable ordering of occurrences within each rule: by file then line.
     for by_type in by_level.values():
-        for groups in by_type.values():
-            groups.sort(key=lambda g: (g[0].file, g[0].id))
+        for by_rule in by_type.values():
+            for rule_findings in by_rule.values():
+                rule_findings.sort(key=lambda f: (f.file, f.line or 0))
     return by_level
 
 
-def _print_group(console: Console, group: list) -> None:
-    """Print one collapsed finding block, indented under its category."""
-    first = group[0]
+def _location(finding) -> str:
+    loc = finding.file
+    if finding.line is not None:
+        loc += f":{finding.line}"
+    return loc
+
+
+def _print_rule_group(console: Console, findings: list) -> None:
+    """Print all occurrences of one rule, sharing a single impact/recommendation."""
+    first = findings[0]
     sev = first.severity
     console.print()
+
     header = Text("    ")
     header.append(f"[{sev.value.upper()}] ", style=_SEVERITY_STYLE[sev])
     header.append(f"{first.id}: {first.title}")
-    if len(group) > 1:
-        header.append(f"  (×{len(group)})", style="dim")
+    if len(findings) > 1:
+        header.append(f"  ({len(findings)} occurrences)", style="dim")
     console.print(header)
 
-    if len(group) == 1:
-        location = first.file
-        if first.line is not None:
-            location += f":{first.line}"
-        console.print(f"    File: {location}")
-        console.print(f"    Evidence: {first.evidence}")
-    else:
-        lines = [f.line for f in group if f.line is not None]
-        shown = ", ".join(str(n) for n in lines[:10])
-        if len(lines) > 10:
-            shown += f", … (+{len(lines) - 10} more)"
-        console.print(f"    File: {first.file} ({len(group)} occurrences)")
-        console.print(f"    Lines: {shown}")
-        console.print(f"    Evidence (first): {first.evidence}")
-
+    # Shared explanation, printed once for the whole rule.
     console.print(f"    Impact: {first.impact}")
     console.print(f"    Recommendation: {first.recommendation}")
     console.print(f"    Confidence: {first.confidence.value}")
+
+    if len(findings) == 1:
+        console.print(f"    Location: {_location(first)}")
+        console.print(f"    Evidence: {first.evidence}")
+        return
+
+    console.print("    Locations:")
+    for finding in findings[:_MAX_LOCATIONS]:
+        console.print(f"      {_location(finding)} — {finding.evidence}")
+    if len(findings) > _MAX_LOCATIONS:
+        console.print(f"      … (+{len(findings) - _MAX_LOCATIONS} more)")
 
 
 def _print_summary(console: Console, result: ScanResult) -> None:

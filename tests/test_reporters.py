@@ -31,6 +31,15 @@ def test_text_report_groups_by_level_and_type() -> None:
     assert out.index("── CRITICAL") < out.index("── LOW")
 
 
+def test_text_report_does_not_repeat_impact_per_occurrence() -> None:
+    # BT-WALLET-PATH-001 fires more than once in this fixture; its Impact and
+    # Recommendation must be printed once for the rule, with the hits listed as
+    # locations rather than repeating the whole block.
+    out = _render_text("risky_wallet_exfil")
+    assert out.count("Referencing the wallet directory") == 1
+    assert "Locations:" in out
+
+
 def test_json_report_has_stable_schema() -> None:
     result = scan_fixture("risky_curl_bash")
     payload = json.loads(json_reporter.render(result))
