@@ -16,12 +16,42 @@ def _scan_dir(path: Path, config: ScanConfig | None = None):
     return scan_path(path, target, config or ScanConfig())
 
 
-def test_wallet_path_detected_in_code() -> None:
+def test_wallet_path_reference_is_low_context() -> None:
+    # A plain wallet-directory reference is expected in subnet repos, so it is
+    # low-severity context, not a high-risk finding.
     result = scan_fixture("risky_wallet_access")
     assert_has_finding(result, "BT-WALLET-PATH-001")
-    # In code, the wallet path is high severity.
     wallet = next(f for f in result.findings if f.id == "BT-WALLET-PATH-001")
-    assert wallet.severity == Severity.HIGH
+    assert wallet.severity == Severity.LOW
+
+
+def test_reading_a_wallet_file_is_high() -> None:
+    # The real risk: opening a coldkey file under the wallet directory.
+    result = scan_fixture("risky_wallet_access")
+    assert_has_finding(result, "PY-WALLET-FILE-OPEN-001")
+    finding = next(f for f in result.findings if f.id == "PY-WALLET-FILE-OPEN-001")
+    assert finding.severity == Severity.HIGH
+
+
+def test_wallet_exfiltration_is_critical() -> None:
+    # Reading key material AND sending it over the network is the theft pattern.
+    result = scan_fixture("risky_wallet_exfil")
+    assert_has_finding(result, "BT-WALLET-EXFIL-001")
+    finding = next(f for f in result.findings if f.id == "BT-WALLET-EXFIL-001")
+    assert finding.severity == Severity.CRITICAL
+
+
+def test_wallet_directory_copy_is_high() -> None:
+    result = scan_fixture("risky_wallet_exfil")
+    assert_has_finding(result, "BT-WALLET-COPY-001")
+
+
+def test_benign_wallet_path_reference_is_not_high(tmp_path: Path) -> None:
+    # Config that merely points at the wallet dir must not produce any
+    # high/critical finding -- this is the common subnet-repo case.
+    (tmp_path / "config.py").write_text('wallet_path = "~/.bittensor/wallets"\n')
+    result = _scan_dir(tmp_path, ScanConfig(rules=("bittensor",)))
+    assert not any(f.severity in (Severity.HIGH, Severity.CRITICAL) for f in result.findings)
 
 
 def test_safe_repo_has_no_wallet_path_finding() -> None:

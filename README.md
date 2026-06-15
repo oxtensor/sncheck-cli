@@ -52,13 +52,24 @@ sncheck check <target> --rules shell,python    # only run specific groups
 
 ## What It Detects
 
-- Bittensor wallet path access
-- Hotkey, coldkey, and mnemonic references
-- Remote scripts piped to shell (`curl ... | bash`)
-- Python dynamic execution (`eval`, `exec`, `os.system`, `subprocess(shell=True)`)
-- Suspicious subprocess usage
+High-signal wallet risks (the operations that actually steal keys):
+
+- **Wallet exfiltration** — reading a coldkey/mnemonic and sending it over the network (critical)
+- **Wallet directory copy** — `cp`/`tar`/`scp` of `~/.bittensor` off the machine (high)
+- **Reading wallet key files** — opening coldkey/wallet files (high)
+- **Fund-moving commands** — `btcli transfer` / `btcli stake` (critical/medium)
+
+Other risks:
+
+- Remote scripts piped to shell (`curl ... | bash`), base64-decoded payloads
+- Python dynamic execution (`eval`, `exec`, `os.system`, `subprocess(shell=True)`, `pickle.load`)
 - Docker install risks (root user, privileged, host mounts)
 - Dependency hygiene issues (missing lockfiles, unpinned/remote dependencies)
+
+Referencing the wallet directory, a hotkey, or a coldkey is **expected** in nearly
+every subnet repo, so SNCheck treats a plain reference as low/info context — not a
+risk. The high/critical severities are reserved for code that *does* something
+dangerous with wallet material.
 
 ## Example Output
 

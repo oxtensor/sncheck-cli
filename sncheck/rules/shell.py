@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import re
+from collections.abc import Iterable
+
 from sncheck.file_inventory import FileKind
-from sncheck.models import Category, Confidence, Severity
-from sncheck.rules.base import regex_line_rule
+from sncheck.models import Category, Confidence, Finding, Severity
+from sncheck.rules.base import FileContext, Rule, regex_line_rule, register, strip_evidence
 
 GROUP = "shell"
 
@@ -98,16 +101,53 @@ regex_line_rule(
     patterns=[r"sudo\s+(?:apt|apt-get|yum|dnf|pip|pip3)\s+install\b"],
 )
 
-regex_line_rule(
+# SH-RM-RF-001 needs a little context: a forced recursive delete of a build or
+# package cache (the standard 'rm -rf /var/lib/apt/lists/*' Docker cleanup) is
+# benign, while one targeting the wallet/home directory is a real risk.
+_RM_RF_RE = re.compile(r"\brm\s+-rf\b|\brm\s+-fr\b")
+_RM_BENIGN_RE = re.compile(
+    r"/var/lib/apt/lists|/var/cache/|/tmp/|node_modules|__pycache__|\.cache|"
+    r"\bbuild\b|\bdist\b|\.egg-info|\*\.pyc",
+    re.IGNORECASE,
+)
+_RM_WALLET_RE = re.compile(r"\.bittensor|~|\$HOME|/root\b|/home/", re.IGNORECASE)
+
+
+def _rm_rf_check(ctx: FileContext) -> Iterable[Finding]:
+    if ctx.kind not in _SHELL_KINDS:
+        return
+    for lineno, line in enumerate(ctx.lines(), start=1):
+        if not _RM_RF_RE.search(line):
+            continue
+        if _RM_BENIGN_RE.search(line):
+            continue  # standard cache/build cleanup, not a risk
+        if _RM_WALLET_RE.search(line):
+            severity, confidence = Severity.HIGH, Confidence.HIGH
+        else:
+            severity, confidence = Severity.MEDIUM, Confidence.MEDIUM
+        yield _rm_rf_rule.make_finding(
+            file=ctx.relative,
+            line=lineno,
+            evidence=strip_evidence(line),
+            severity=severity,
+            confidence=confidence,
+        )
+
+
+_rm_rf_rule = Rule(
     id="SH-RM-RF-001",
     title="Destructive recursive removal",
     severity=Severity.MEDIUM,
     category=Category.SHELL,
     confidence=Confidence.MEDIUM,
-    description="The script performs a forced recursive delete, sometimes as root.",
-    impact="Files can be destroyed irreversibly, potentially including wallet data.",
-    recommendation="Confirm the target path. Be cautious of 'rm -rf' on home or wallet paths.",
+    description="The script performs a forced recursive delete outside the usual build/package "
+    "caches.",
+    impact="Files can be destroyed irreversibly. Targeting a home or wallet path can wipe "
+    "wallet data.",
+    recommendation="Confirm the target path. Be especially cautious of 'rm -rf' on home or "
+    "wallet directories.",
     group=GROUP,
-    kinds=_SHELL_KINDS,
-    patterns=[r"\brm\s+-rf\b", r"\brm\s+-fr\b"],
+    check=_rm_rf_check,
+    kinds=frozenset(_SHELL_KINDS),
 )
+register(_rm_rf_rule)

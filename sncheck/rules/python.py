@@ -202,5 +202,9 @@ regex_line_rule(
     "or transmitted.",
     group=GROUP,
     kinds=_PY,
-    patterns=[r"open\s*\([^)]*\.bittensor[\\/]wallets"],
+    patterns=[
+        r"open\s*\([^)]*\.bittensor[\\/]wallets",
+        r"open\s*\([^)]*coldkey(?!pub)",
+        r"(?:read_text|read_bytes)\s*\([^)]*\.bittensor[\\/]wallets",
+    ],
 )

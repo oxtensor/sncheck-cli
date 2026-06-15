@@ -1,8 +1,11 @@
 """Bittensor-specific rules: wallet, hotkey, coldkey, mnemonic, and btcli usage.
 
-Not every match is malicious. Severity is tuned by *where* the match appears:
-documentation that mentions ``--wallet.name`` is informational, while Python or
-shell code that opens files under ``~/.bittensor/wallets`` is high risk.
+Referencing the wallet directory, a hotkey, or a coldkey is *expected* in nearly
+every subnet repo, so a plain reference is treated as low/info context. The real
+risk is what code *does* with wallet material: reading the coldkey/mnemonic and
+sending it over the network (BT-WALLET-EXFIL-001), or copying the wallet
+directory off the machine (BT-WALLET-COPY-001). Those carry the high/critical
+severities.
 """
 
 from __future__ import annotations
@@ -17,43 +20,115 @@ from sncheck.rules.base import FileContext, Rule, regex_line_rule, register, str
 GROUP = "bittensor"
 
 _CODE_KINDS = (FileKind.PYTHON, FileKind.SHELL, FileKind.DOCKER, FileKind.WORKFLOW)
-
-# Wallet directory path. In docs this is info; in code it is high risk.
-_WALLET_PATH_RE = re.compile(r"(?:~|\$HOME|[\w./-]*)?[./]bittensor[\\/]wallets", re.IGNORECASE)
+_DOC_AND_CODE = _CODE_KINDS + (FileKind.DOCS,)
 
 
-def _wallet_path_check(ctx: FileContext) -> Iterable[Finding]:
-    in_docs = ctx.kind == FileKind.DOCS
-    for lineno, line in enumerate(ctx.lines(), start=1):
-        if _WALLET_PATH_RE.search(line):
-            if in_docs:
-                severity, confidence = Severity.LOW, Confidence.LOW
-            else:
-                severity, confidence = Severity.HIGH, Confidence.HIGH
-            yield _wallet_path_rule.make_finding(
-                file=ctx.relative,
-                line=lineno,
-                evidence=strip_evidence(line),
-                severity=severity,
-                confidence=confidence,
-            )
-
-
-_wallet_path_rule = Rule(
+# -- BT-WALLET-PATH-001: a plain reference to the wallet directory ------------
+# Expected in essentially every subnet repo (config defaults, env vars, docs),
+# so this is informational context, not a risk on its own.
+regex_line_rule(
     id="BT-WALLET-PATH-001",
-    title="Bittensor wallet path access",
+    title="Bittensor wallet directory reference",
+    severity=Severity.LOW,
+    category=Category.BITTENSOR,
+    confidence=Confidence.LOW,
+    description="Code or config references the default Bittensor wallet directory.",
+    impact="Referencing the wallet directory is normal in subnet repos. It only becomes a risk "
+    "if wallet files are read and their contents then leave the machine.",
+    recommendation="No action needed for a plain path reference. Review only if wallet files "
+    "are read and copied or transmitted (see BT-WALLET-EXFIL-001, BT-WALLET-COPY-001).",
+    group=GROUP,
+    kinds=_DOC_AND_CODE,
+    patterns=[r"(?:~|\$HOME|[\w./-]*)?[./]bittensor[\\/]wallets"],
+    flags=re.IGNORECASE,
+    per_file_once=True,
+)
+
+
+# -- BT-WALLET-EXFIL-001: read key material AND send it over the network ------
+# This is the actual wallet-theft pattern. We only treat *key material* as a
+# secret (opening a wallet file, a coldkey file, or a mnemonic) -- not a plain
+# path or a hotkey, since subnet code legitimately signs and makes network
+# calls. A finding requires both a secret read and a network sink in one file.
+_WALLET_SECRET_RE = re.compile(
+    r"open\s*\([^)]*\.bittensor[\\/]wallets"  # opening a wallet file
+    r"|\.bittensor[\\/]wallets[\\/][^\s'\"]*coldkey"  # path to a coldkey file
+    r"|\bcoldkey\b[^\n]*\.(?:read|load|export|save|dump)"  # reading/exporting a coldkey
+    r"|\bmnemonic\b",  # any mnemonic handling
+    re.IGNORECASE,
+)
+_NET_SINK_RE = re.compile(
+    r"requests\.(?:get|post|put|patch)\s*\("
+    r"|httpx\."
+    r"|urllib\.request"
+    r"|aiohttp\."
+    r"|socket\.socket"
+    r"|smtplib\.|ftplib\.|paramiko\.|boto3"
+    r"|api\.telegram\.org"
+    r"|discord(?:app)?\.com/api/webhooks"
+    r"|hooks\.slack\.com"
+    r"|pastebin\.com"
+    r"|\bcurl\b|\bwget\b|\bscp\b|\bnc\b",
+    re.IGNORECASE,
+)
+
+
+def _wallet_exfil_check(ctx: FileContext) -> Iterable[Finding]:
+    if ctx.kind not in (FileKind.PYTHON, FileKind.SHELL):
+        return
+    secret: tuple[int, str] | None = None
+    has_sink = False
+    for lineno, line in enumerate(ctx.lines(), start=1):
+        if secret is None and _WALLET_SECRET_RE.search(line):
+            secret = (lineno, line)
+        if _NET_SINK_RE.search(line):
+            has_sink = True
+    if secret is not None and has_sink:
+        yield _wallet_exfil_rule.make_finding(
+            file=ctx.relative, line=secret[0], evidence=strip_evidence(secret[1])
+        )
+
+
+_wallet_exfil_rule = Rule(
+    id="BT-WALLET-EXFIL-001",
+    title="Wallet key material read alongside a network sink",
+    severity=Severity.CRITICAL,
+    category=Category.BITTENSOR,
+    confidence=Confidence.MEDIUM,
+    description="A file reads wallet key material (a wallet file, coldkey, or mnemonic) and "
+    "also contains code that sends data over the network.",
+    impact="This is the pattern used to steal wallets: read the key or mnemonic, then upload "
+    "it to a remote server.",
+    recommendation="Verify the key material is never included in any outbound request. Do not "
+    "run this on a machine with real wallets until you have confirmed it is safe.",
+    group=GROUP,
+    check=_wallet_exfil_check,
+    kinds=frozenset((FileKind.PYTHON, FileKind.SHELL)),
+)
+register(_wallet_exfil_rule)
+
+
+# -- BT-WALLET-COPY-001: copy/archive/stream the wallet directory ------------
+regex_line_rule(
+    id="BT-WALLET-COPY-001",
+    title="Wallet directory copied or archived",
     severity=Severity.HIGH,
     category=Category.BITTENSOR,
-    confidence=Confidence.HIGH,
-    description="Code references the default Bittensor wallet directory.",
-    impact="Miner wallet files may be read, copied, modified, or exfiltrated.",
-    recommendation="Review why this code accesses ~/.bittensor/wallets before running it on a "
-    "machine with real wallets.",
+    confidence=Confidence.MEDIUM,
+    description="A shell command copies, archives, or streams the Bittensor wallet directory.",
+    impact="Copying the wallet directory is a common step in stealing keys, especially to /tmp "
+    "or a remote host.",
+    recommendation="Confirm why the wallet directory is copied. Treat copies to /tmp or a "
+    "remote host as key theft until proven otherwise.",
     group=GROUP,
-    check=_wallet_path_check,
-    kinds=frozenset(),  # inspect every text file; severity depends on kind
+    kinds=(FileKind.SHELL, FileKind.DOCKER, FileKind.WORKFLOW),
+    patterns=[
+        r"\b(?:cp|mv|rsync|scp|sftp|tar|zip)\b[^\n]*\.bittensor",
+        r"\bcat\b[^\n]*\.bittensor[\\/]wallets",
+        r"\.bittensor[\\/]?[^\n|]*\|\s*(?:nc|ncat|curl|wget)\b",
+    ],
+    flags=re.IGNORECASE,
 )
-register(_wallet_path_rule)
 
 
 regex_line_rule(
@@ -74,19 +149,20 @@ regex_line_rule(
 regex_line_rule(
     id="BT-COLDKEY-REF-001",
     title="Coldkey reference in code",
-    severity=Severity.MEDIUM,
+    severity=Severity.LOW,
     category=Category.BITTENSOR,
     confidence=Confidence.LOW,
     description="Code references a coldkey.",
-    impact="The coldkey controls funds. Code that reads or moves it warrants review.",
-    recommendation="Check whether this code reads, copies, or transmits coldkey material.",
+    impact="The coldkey controls funds, but referencing it (type fields, config, comments) is "
+    "normal. The risk is reading and transmitting it, which BT-WALLET-EXFIL-001 covers.",
+    recommendation="No action for a plain reference. Review only if the coldkey file is read "
+    "and its contents leave the machine.",
     group=GROUP,
     kinds=_CODE_KINDS,
     patterns=[r"\bcoldkey\b"],
     flags=re.IGNORECASE,
     # Coldkey appears throughout normal wallet code; one awareness finding per
-    # file is enough. The dedicated wallet-path / mnemonic rules carry the real
-    # high-severity signal.
+    # file is enough.
     per_file_once=True,
 )
 

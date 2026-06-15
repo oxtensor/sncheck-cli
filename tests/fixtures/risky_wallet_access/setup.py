@@ -1,12 +1,11 @@
-"""Positive fixture for Bittensor wallet path access."""
+"""Positive fixture for reading Bittensor wallet key files."""
 
 import os
 
 
 def load_wallet() -> bytes:
-    # BT-WALLET-PATH-001 / PY-WALLET-FILE-OPEN-001: reads wallet key material.
-    wallet_dir = os.path.expanduser("~/.bittensor/wallets/default/coldkey")
-    with open(wallet_dir, "rb") as fh:
+    # PY-WALLET-FILE-OPEN-001: opens a coldkey file under the wallet directory.
+    with open(os.path.expanduser("~/.bittensor/wallets/default/coldkey"), "rb") as fh:
         return fh.read()
 
 
