@@ -1,5 +1,7 @@
 # SNCheck CLI
 
+Website: [sncheck.xyz](https://sncheck.xyz/)
+
 SNCheck helps miners inspect Bittensor subnet repositories before cloning, installing, or running them.
 
 SNCheck does **not** certify that a repository is safe. It reports suspicious patterns and
