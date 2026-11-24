@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from sncheck.cli import app
@@ -99,3 +100,13 @@ def test_check_unknown_rule_group_is_usage_error() -> None:
 def test_check_unresolvable_target_exit_three() -> None:
     result = runner.invoke(app, ["check", "this is not a valid target!!"])
     assert result.exit_code == 3
+
+
+@pytest.mark.parametrize("raw", ["./missing-miner", "~sncheck-no-such-user/miner"])
+def test_check_missing_local_path_exit_three(
+    raw: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["check", raw, "--format", "json"])
+    assert result.exit_code == 3
+    assert json.loads(result.stdout)["error"] == f"Local path does not exist: {raw}"
