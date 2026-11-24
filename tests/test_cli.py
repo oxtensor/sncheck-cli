@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from typer.testing import CliRunner
 
@@ -50,6 +51,13 @@ def test_check_fail_on_high() -> None:
 def test_check_fail_on_high_clean_repo_exit_zero() -> None:
     result = runner.invoke(app, ["check", str(FIXTURES / "safe_repo"), "--fail-on", "high"])
     assert result.exit_code == 0
+
+
+def test_check_fail_on_high_ignores_torch_eval_method(tmp_path: Path) -> None:
+    # A benign model.eval() on a call result must not trip --fail-on high.
+    (tmp_path / "miner.py").write_text("model = load_model().eval()\n")
+    result = runner.invoke(app, ["check", str(tmp_path), "--fail-on", "high"])
+    assert result.exit_code == 0, result.stdout
 
 
 def test_check_json_format() -> None:
