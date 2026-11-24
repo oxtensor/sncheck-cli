@@ -38,6 +38,33 @@ def test_regex_fallback_on_unparseable_python(tmp_path: Path) -> None:
     assert_has_finding(result, "PY-OS-SYSTEM-001")
 
 
+def _eval_lines(result) -> list[int]:
+    return sorted(f.line for f in result.findings if f.id == "PY-EVAL-EXEC-001")
+
+
+def test_eval_method_on_call_result_or_subscript_not_flagged(tmp_path: Path) -> None:
+    # PyTorch's Module.eval() is ubiquitous in subnet code. Called on a call
+    # result or subscript it must not be mistaken for the eval() builtin, while
+    # a real eval() in the same file is still reported.
+    (tmp_path / "model.py").write_text(
+        "model = AutoModelForCausalLM.from_pretrained('gpt2').eval()\n"
+        "layers[0].eval()\n"
+        "self.model.eval()\n"
+        "eval(payload)\n"
+    )
+    target = Target(type=TargetType.LOCAL, raw=str(tmp_path), path=str(tmp_path))
+    result = scan_path(tmp_path, target, ScanConfig(rules=("python",)))
+    assert _eval_lines(result) == [4]
+
+
+def test_eval_method_not_flagged_by_regex_fallback(tmp_path: Path) -> None:
+    # Same as above when the file cannot be parsed and the regex fallback runs.
+    (tmp_path / "broken.py").write_text("def f(:\n    model.eval()\n    exec(code)\n")
+    target = Target(type=TargetType.LOCAL, raw=str(tmp_path), path=str(tmp_path))
+    result = scan_path(tmp_path, target, ScanConfig(rules=("python",)))
+    assert _eval_lines(result) == [3]
+
+
 def test_call_name_handles_plain_name() -> None:
     # Sanity check the InventoryFile model is usable in isolation.
     inv = InventoryFile(path=Path("x.py"), relative="x.py", kind=FileKind.PYTHON, size=1)

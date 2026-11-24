@@ -28,7 +28,13 @@ def _evidence_at(ctx: FileContext, line: int | None) -> str:
 
 
 def _call_name(node: ast.Call) -> str | None:
-    """Return a dotted call target like 'os.system' or 'eval'."""
+    """Return a dotted call target like 'os.system' or 'eval'.
+
+    Returns None unless the callee is a plain name or an attribute chain rooted
+    at a name. A method on a call result or subscript (``load().eval()``,
+    ``layers[0].eval()``) has no static dotted name, and reducing it to the bare
+    method name would make it indistinguishable from the ``eval`` builtin.
+    """
     func = node.func
     if isinstance(func, ast.Name):
         return func.id
@@ -38,8 +44,9 @@ def _call_name(node: ast.Call) -> str | None:
         while isinstance(cur, ast.Attribute):
             parts.append(cur.attr)
             cur = cur.value
-        if isinstance(cur, ast.Name):
-            parts.append(cur.id)
+        if not isinstance(cur, ast.Name):
+            return None
+        parts.append(cur.id)
         return ".".join(reversed(parts))
     return None
 
@@ -172,7 +179,8 @@ _ast_rule(
     impact="If the evaluated string is influenced by remote data, this is remote code execution.",
     recommendation="Remove eval/exec or replace with explicit, safe parsing.",
     matcher=_match_eval_exec,
-    fallback_patterns=[r"\beval\s*\(", r"\bexec\s*\("],
+    # The lookbehind skips methods of the same name, e.g. PyTorch's model.eval().
+    fallback_patterns=[r"(?<!\.)\beval\s*\(", r"(?<!\.)\bexec\s*\("],
 )
 
 _ast_rule(
