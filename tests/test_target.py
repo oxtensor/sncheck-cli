@@ -39,6 +39,47 @@ def test_resolve_bare_shorthand() -> None:
     assert target.type == TargetType.GITHUB
 
 
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "./miner",
+        "../miner",
+        "../../subnets/miner",
+        "./src/miner",
+        "~/miner",
+        "~sncheck-no-such-user/miner",
+        "/sncheck-does-not-exist/miner",
+    ],
+)
+def test_missing_local_path_is_not_github_shorthand(
+    raw: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Path-like targets that do not exist must fail with a clear error instead
+    # of resolving to e.g. https://github.com/./miner and cloning that.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    with pytest.raises(TargetError, match=r"^Local path does not exist: "):
+        resolve_target(raw)
+
+
+def test_existing_dot_relative_path_resolves_locally(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "miner").mkdir()
+    monkeypatch.chdir(tmp_path)
+    target = resolve_target("./miner")
+    assert target.type == TargetType.LOCAL
+    assert target.path == str((tmp_path / "miner").resolve())
+
+
+@pytest.mark.parametrize("raw", ["opentensor/bittensor", "src/miner", "gh:example/subnet"])
+def test_missing_owner_repo_still_resolves_to_github(
+    raw: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert resolve_target(raw).type == TargetType.GITHUB
+
+
 def test_resolve_rejects_garbage() -> None:
     with pytest.raises(TargetError):
         resolve_target("not a target!!")

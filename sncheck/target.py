@@ -35,15 +35,20 @@ def resolve_target(raw: str) -> Target:
     """Resolve a raw target string into normalized metadata.
 
     Recognizes GitHub URLs, ``gh:owner/repo`` shorthand, bare ``owner/repo``
-    shorthand, and local filesystem paths.
+    shorthand, and local filesystem paths. A target that can only be a path
+    (``./x``, ``../x``, ``~/x``, ``/x``) but does not exist is reported as a
+    missing path rather than tried as GitHub shorthand.
     """
     raw = raw.strip()
     if not raw:
         raise TargetError("Empty target.")
 
     # Local path takes priority if it actually exists on disk.
-    candidate = Path(raw).expanduser()
-    if candidate.exists():
+    try:
+        candidate: Path | None = Path(raw).expanduser()
+    except RuntimeError:  # "~user/..." for an unknown user
+        candidate = None
+    if candidate is not None and candidate.exists():
         if not candidate.is_dir():
             raise TargetError(f"Local target is not a directory: {raw}")
         return Target(
@@ -51,6 +56,9 @@ def resolve_target(raw: str) -> Target:
             raw=raw,
             path=str(candidate.resolve()),
         )
+
+    if _is_path_like(raw):
+        raise TargetError(f"Local path does not exist: {raw}")
 
     owner_repo = _match_github(raw)
     if owner_repo is not None:
@@ -67,6 +75,18 @@ def resolve_target(raw: str) -> Target:
         f"Could not resolve target {raw!r}. Expected a local path, a GitHub URL, "
         "or 'owner/repo' shorthand."
     )
+
+
+def _is_path_like(raw: str) -> bool:
+    """Whether ``raw`` can only be a filesystem path, never a GitHub target.
+
+    True for home-relative and absolute paths, and for paths whose first
+    component is ``.`` or ``..``, which the bare ``owner/repo`` pattern would
+    otherwise accept as an owner (``./miner`` -> ``github.com/./miner``).
+    """
+    if raw.startswith("~") or Path(raw).is_absolute():
+        return True
+    return re.split(r"[\\/]", raw, maxsplit=1)[0] in {".", ".."}
 
 
 def _match_github(raw: str) -> tuple[str, str] | None:
