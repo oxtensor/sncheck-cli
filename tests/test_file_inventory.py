@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from sncheck.file_inventory import FileKind, build_inventory, classify
 
 from .conftest import FIXTURES
@@ -16,6 +18,44 @@ def test_classify_by_extension(tmp_path: Path) -> None:
     assert classify(tmp_path / "requirements.txt") == FileKind.DEPENDENCY
     assert classify(tmp_path / "README.md") == FileKind.DOCS
     assert classify(tmp_path / "data.bin") == FileKind.OTHER
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "requirements-dev.txt",
+        "requirements_test.txt",
+        "requirements.dev.txt",
+        "Requirements-GPU.txt",
+        "dev-requirements.txt",
+        "test_requirements.txt",
+        "constraints.txt",
+        "constraints-cuda.txt",
+        "requirements.in",
+        "requirements/base.txt",
+        "requirements/dev.in",
+    ],
+)
+def test_classify_requirements_variants_as_dependency(relative: str) -> None:
+    assert classify(Path(relative)) == FileKind.DEPENDENCY
+
+
+@pytest.mark.parametrize(
+    "relative",
+    ["notes.txt", "LICENSE.txt", "docs/install.txt", "requirementsfoo.txt", "requirements.md"],
+)
+def test_classify_ordinary_text_files_stay_docs(relative: str) -> None:
+    assert classify(Path(relative)) == FileKind.DOCS
+
+
+def test_inventory_ignores_directories_above_repo_root(tmp_path: Path) -> None:
+    # A repo checked out into a directory named "requirements" must not turn
+    # its top-level text files into dependency files.
+    root = tmp_path / "requirements"
+    root.mkdir()
+    (root / "notes.txt").write_text("hello\n")
+    kinds = {f.relative: f.kind for f in build_inventory(root)}
+    assert kinds["notes.txt"] == FileKind.DOCS
 
 
 def test_inventory_skips_git_and_binaries(tmp_path: Path) -> None:
